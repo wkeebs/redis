@@ -1,0 +1,42 @@
+# Build artifacts and output directories
+/build/
+*.o
+*.exe
+*.out
+*.a
+*.so
+*.dylib
+
+# dSYM files for macOS (debugging symbols)
+*.dSYM/
+
+# Temporary files
+*.tmp
+*.log
+*.pid
+*.bak
+*.swp
+*.swo
+*.DS_Store
+
+# C++ compiler-generated files
+*.gch
+
+# Visual Studio Code specific files
+.vscode/
+
+# IDEs and editor backups (general)
+*.idea/
+*.vscode/
+*.iml
+*.user
+*.class
+*.sln
+*.bin
+*.obj
+
+# MacOS specific hidden files
+.DS_Store
+
+# Makefile-generated directories
+Makefile

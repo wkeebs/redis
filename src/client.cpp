@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,20 +8,80 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
+#include <shared.h>
 
 /**
- * @brief Terminates the program with an error message.
+ * @brief Sends a query to a server and processes the response.
  *
- * This function prints the provided error message using perror and then
- * terminates the program with an exit status of EXIT_FAILURE.
+ * This function sends a text query to a server via a file descriptor and reads the server's response.
+ * It handles the communication protocol, including sending the length of the query, reading the response
+ * length, and ensuring the response is within acceptable limits.
  *
- * @param msg The error message to be printed.
+ * @param fd The file descriptor for the server connection.
+ * @param text The text query to send to the server.
+ * @return int32_t Returns 0 on success, or a negative value on error.
+ *
+ * The function performs the following steps:
+ * 1. Calculates the length of the query text.
+ * 2. Checks if the query length exceeds the maximum allowed message length.
+ * 3. Constructs a write buffer with the query length and text, and sends it to the server.
+ * 4. Reads the response header from the server to get the response length.
+ * 5. Checks if the response length exceeds the maximum allowed message length.
+ * 6. Reads the response body from the server.
+ * 7. Prints the server's response.
  */
-static void die(const char *msg)
+static int32_t query(int fd, const char *text)
 {
-    int err = errno;
-    fprintf(stderr, "[%d] %s\n", err, msg);
-    abort();
+    uint32_t len = (uint32_t)strlen(text);
+    if (len > k_max_msg)
+    {
+        return -1;
+    }
+
+    char wbuf[4 + k_max_msg];
+    memcpy(wbuf, &len, 4); // assume little endian
+    memcpy(&wbuf[4], text, len);
+    if (int32_t err = write_all(fd, wbuf, 4 + len))
+    {
+        return err;
+    }
+
+    // 4 bytes header
+    char rbuf[4 + k_max_msg + 1];
+    errno = 0;
+    int32_t err = read_full(fd, rbuf, 4);
+    if (err)
+    {
+        if (errno == 0)
+        {
+            msg("EOF");
+        }
+        else
+        {
+            msg("read() error");
+        }
+        return err;
+    }
+
+    memcpy(&len, rbuf, 4); // assume little endian
+    if (len > k_max_msg)
+    {
+        msg("too long");
+        return -1;
+    }
+
+    // reply body
+    err = read_full(fd, &rbuf[4], len);
+    if (err)
+    {
+        msg("read() error");
+        return err;
+    }
+
+    // do something
+    rbuf[4 + len] = '\0';
+    printf("server says: %s\n", &rbuf[4]);
+    return 0;
 }
 
 int main()
@@ -45,26 +106,26 @@ int main()
         die("connect");
     }
 
-    // Send a message
-    char msg[] = "hello";
-    if (write(fd, msg, strlen(msg)) < 0)
+    // multiple requests
+    int32_t err = query(fd, "hello1");
+    if (err)
     {
-        die("write()");
+        goto L_DONE;
+    }
+    err = query(fd, "hello2");
+    if (err)
+    {
+        goto L_DONE;
+    }
+    err = query(fd, "hello3");
+    if (err)
+    {
+        goto L_DONE;
     }
 
-    // Receive a message -> write into buffer
-    char rbuf[64] = {};
-    ssize_t n = read(fd, rbuf, sizeof(rbuf) - 1);
-    if (n < 0)
-    {
-        die("read");
-    }
-
-    // Print the message from buffer
-    printf("server says: %s\n", rbuf);
-
-    // Close the socket
+L_DONE:
     close(fd);
+    return 0;
 
     return 0;
 }

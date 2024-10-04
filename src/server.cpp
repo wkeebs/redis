@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,25 +8,75 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
-
-static void msg(const char *msg)
-{
-    fprintf(stderr, "%s\n", msg);
-}
+#include <shared.h>
 
 /**
- * @brief Terminates the program with an error message.
+ * @brief Handles a single request from a client.
  *
- * This function prints the provided error message using perror and then
- * terminates the program with an exit status of EXIT_FAILURE.
+ * This function reads a request from a client, processes it, and sends a reply.
+ * The request and reply follow a simple protocol where the first 4 bytes
+ * indicate the length of the message body.
  *
- * @param msg The error message to be printed.
+ * @param connfd The file descriptor for the client connection.
+ * @return int32_t Returns 0 on success, or a negative error code on failure.
+ *
+ * The function performs the following steps:
+ * 1. Reads a 4-byte header to determine the length of the incoming message.
+ * 2. Reads the message body based on the length specified in the header.
+ * 3. Processes the request and prints the message from the client.
+ * 4. Constructs a reply message and sends it back to the client.
+ *
+ * Error handling:
+ * - If reading the header or message body fails, an error message is logged and the error code is returned.
+ * - If the message length exceeds the maximum allowed length, an error message is logged and -1 is returned.
  */
-static void die(const char *msg)
+static int32_t one_request(int connfd)
 {
-    int err = errno;
-    fprintf(stderr, "[%d] %s\n", err, msg);
-    abort();
+    // read the 4 byte header
+    char rbuf[4 + k_max_msg + 1];
+    errno = 0;
+    int32_t err = read_full(connfd, rbuf, 4); // read 4 bytes
+    if (err)
+    {
+        if (errno == 0)
+        {
+            msg("EOF");
+        }
+        else
+        {
+            msg("read() error");
+        }
+        return err;
+    }
+
+    // read request length
+    uint32_t len = 0;
+    memcpy(&len, rbuf, 4); // copy 4 bytes to len - assume little endian
+    if (len > k_max_msg)
+    {
+        msg("message too long");
+        return -1;
+    }
+
+    // read request body
+    err = read_full(connfd, rbuf, len); // read len bytes
+    if (err)
+    {
+        msg("read() error");
+        return err;
+    }
+
+    // process request (do something)
+    rbuf[len] = '\0'; // null-terminate the string
+    printf("client says: %s\n", &rbuf[0]);
+
+    // reply using the same protocol
+    const char reply[] = "world";
+    char wbuf[4 + sizeof(reply)];
+    len = (uint32_t)strlen(reply);
+    memcpy(wbuf, &len, 4);                   // copy 4 bytes to wbuf
+    memcpy(&wbuf[4], reply, len);            // copy len bytes to wbuf
+    return write_all(connfd, wbuf, 4 + len); // write 4 + len bytes
 }
 
 /**
@@ -96,8 +147,14 @@ int main()
             continue; // Error in accept, continue to next
         }
 
-        // Handle the connection
-        do_something(conn_fd);
+        while (true)
+        {
+            int32_t err = one_request(conn_fd);
+            if (err)
+            {
+                break;
+            }
+        }
         close(conn_fd); // Close the connection after handling
     }
 

@@ -1,6 +1,6 @@
 # Redis Project
 
-Welcome to the Redis project! This README will guide you through the setup and usage of the project.
+Welcome to the Redis project! The aim of this project is to build a simple custom version of Redis, to apply data structures in a systems programming context.
 
 ## Table of Contents
 - [Redis Project](#redis-project)
@@ -9,6 +9,6 @@ Welcome to the Redis project! This README will guide you through the setup and u
 
 ## Introduction
 
-Redis is an open-source, in-memory data structure store used as a database, cache, and message broker. This project aims to provide a comprehensive custom implementation for Redis.
+Redis is an open-source, in-memory data structure store used as a database, cache, and message broker. This project aims to provide a comprehensive custom implementation of a Redis-like data store.
 
 Read more about Redis at [redis.io↗](https://redis.io/)

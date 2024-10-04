@@ -1,6 +1,6 @@
 # Redis Project
 
-Welcome to the Redis project! This README will guide you through the setup and usage of the project.
+Welcome to the Redis project! The aim of this project is to build a simple custom version of Redis, to apply data structures in a systems programming context.
 
 ## Table of Contents
 - [Redis Project](#redis-project)

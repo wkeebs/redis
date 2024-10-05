@@ -9,6 +9,8 @@
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <shared.h>
+#include <poll.h>
+#include <vector>
 
 /**
  * @brief Handles a single request from a client.
@@ -136,26 +138,67 @@ int main()
         die("listen()");
     }
 
-    // Accept and handle incoming connections
+    // All client connections, keyed by fd
+    std::vector<Conn *> fd_to_conn;
+
+    fd_set_nb(fd); // set the server's listening fd to non-blocking
+
+    // Event loop
+    std::vector<struct pollfd> poll_args;
     while (true)
     {
-        struct sockaddr_in client_addr = {};
-        socklen_t addrlen = sizeof(client_addr);
-        int conn_fd = accept(fd, (sockaddr *)&client_addr, &addrlen);
-        if (conn_fd < 0)
+        // prepare the arguments of the poll
+        poll_args.clear();
+        
+        // put the listening fd in the first position
+        struct pollfd pfd = {fd, POLLIN, 0};
+        poll_args.push_back(pfd);
+        
+        // connection fds
+        for (Conn *conn : fd_to_conn)
         {
-            continue; // Error in accept, continue to next
+            if (!conn) {
+                continue;
+            }
+            // construct the current pfd
+            struct pollfd pfd = {};
+            pfd.fd = conn->fd;
+            // read if STATE_REQ, write if STATE_RES
+            pfd.events = (conn->state == STATE_REQ) ? POLLIN : POLLOUT; 
+            pfd.events = pfd.events | POLLERR; // error out
+            poll_args.push_back(pfd);
         }
 
-        while (true)
+        // poll for active fds
+        // timeout is irrelevant here
+        int poll_rv = poll(poll_args.data(), (nfds_t)poll_args.size(), 1000);
+        if (poll_rv < 0)
         {
-            int32_t err = one_request(conn_fd);
-            if (err)
-            {
-                break;
+            die("poll()");
+        }
+
+        // process active connections
+        for (size_t i = 1; i < poll_args.size(); ++i) {
+            if (poll_args[i].revents) {
+                // get the connection
+                Conn *conn = fd_to_conn[poll_args[i].fd];
+                connection_io(conn);
+
+                if (conn->state == STATE_END) {
+                    // client closed normally or something bad happened
+                    // destroy the connection
+                    fd_to_conn[conn->fd] = NULL;
+                    (void)close(conn->fd);
+                    free(conn);
+                }
             }
         }
-        close(conn_fd); // Close the connection after handling
+
+        // try to accept a new connection of the listening fd is active
+        if (poll_args[0].revents) {
+            (void)accept_new_conn(fd_to_conn, fd);
+        }
+
     }
 
     return 0;

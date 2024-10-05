@@ -126,6 +126,4 @@ int main()
 L_DONE:
     close(fd);
     return 0;
-
-    return 0;
 }
